@@ -21,6 +21,38 @@ Make sure the story plot has the following structure:
 5. Resolution: The conflict's outcome and the story's conclusion.
 Make sure the story plot is not too long or too short, maximum 1000 words."""
 GENERATE_STORY_PLOT_PROMPT_TEMPLATE = "Generate a creative short story plot based on this story idea: {story_idea}"
+STORY_SECTIONS = [
+    "Introduction",
+    "Inciting Incident",
+    "Development",
+    "Climax",
+    "Resolution"
+]
+GENERATE_STORY_CONTENT_SYSTEM_PROMPT = """You are a creative writing assistant that generates engaging short story content section by section. 
+You will be asked to write a specific section of a story while maintaining continuity with what has been written so far and the overall plot.
+Return only the story content for the requested section, no other text or section headers.
+Make sure the content flows naturally from previous sections and sets up future sections appropriately.
+Keep the content engaging and well-written, with a length appropriate for the section (typically 200-400 words per section)."""
+GENERATE_STORY_CONTENT_PROMPT_TEMPLATE = """Write the '{current_section}' section of a short story.
+
+Story Idea: {story_idea}
+
+Plot Outline: {story_plot}
+
+Story Written So Far:
+{story_content}
+
+Instructions:
+- Include a creative title for this section wrapped in <title></title> tags at the beginning
+- Write specifically the '{current_section}' section
+- Ensure it flows naturally from what has been written so far
+- Follow the plot outline to maintain story coherence
+- Set up the narrative appropriately for the sections that will follow
+- Focus on advancing the story according to the plot structure
+- Maintain consistent character voices and story tone"""
+STORY_CONTENT_MAX_TOKENS = 1000
+STORY_CONTENT_TEMPERATURE = 0.8
+
 
 @dag(
     params={
@@ -113,4 +145,56 @@ def short_story_generator():
 
     #_generated_story_image_covers = generate_story_image_cover.expand(story_idea=_generated_story_ideas)
 
+    @task(retries=3, retry_delay=duration(seconds=30))
+    def generate_story_content(story_data) -> str:
+        """Generate the story content based on the story idea and plot."""
+        story_idea, story_plot = story_data  # Unpack zipped data
+        
+        # connect to sambanova
+        sambanova_hook = OpenAIHook(conn_id="my_sambanova_conn")
+        client = sambanova_hook.get_conn()
+
+        story_sections = []
+
+        for section in STORY_SECTIONS:
+            story_content = "\n".join([f"{sec['title']}: {sec['content']}" for sec in story_sections]) if story_sections else "This is the beginning of the story."
+
+            # generate the story content for the current section
+            response = client.chat.completions.create(
+                model=MODEL_ID,
+                messages=[
+                    {"role": "system", "content": GENERATE_STORY_CONTENT_SYSTEM_PROMPT},
+                    {"role": "user", "content": GENERATE_STORY_CONTENT_PROMPT_TEMPLATE.format(
+                        current_section=section,
+                        story_idea=story_idea, 
+                        story_plot=story_plot, 
+                        story_content=story_content
+                    )}
+                ],
+                max_tokens=STORY_CONTENT_MAX_TOKENS,
+                temperature=STORY_CONTENT_TEMPERATURE
+            )
+            
+            # Extract title and content
+            raw_content = response.choices[0].message.content.strip()
+            
+            # Extract title from <title></title> tags
+            import re
+            title_match = re.search(r'<title>(.*?)</title>', raw_content)
+            extracted_title = title_match.group(1) if title_match else section
+            
+            # Remove title tags from content
+            clean_content = re.sub(r'<title>.*?</title>\s*', '', raw_content)
+            
+            story_sections.append({
+                "title": extracted_title,
+                "content": clean_content
+            })
+
+
+
+        return story_sections
+
+    _generated_story_contents = generate_story_content.expand(story_data=_generated_story_ideas.zip(_generated_story_plots))
+        
 _short_story_generator_dag = short_story_generator()
