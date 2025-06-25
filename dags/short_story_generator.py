@@ -10,11 +10,15 @@ STORY_IDEA_TEMPERATURE = 1.0
 STORY_PLOT_MAX_TOKENS = 1000
 STORY_PLOT_TEMPERATURE = 0.8
 
-# Sambanova model
-MODEL_ID = "gpt-4.1"
+# OpenAI API
+#MODEL_ID = "gpt-4.1"
 
-# Maverick model
+# Sambanova API
 #MODEL_ID = "Llama-4-Maverick-17B-128E-Instruct"
+
+# TogetherAI API
+MODEL_ID = "meta-llama/Llama-4-Scout-17B-16E-Instruct"
+
 GENERATE_STORY_IDEA_SYSTEM_PROMPT = "You are a creative writing assistant that generates engaging short story ideas. Return only the story idea, no other text. Make sure the story idea is not too long or too short, maximum 100 words."
 GENERATE_STORY_IDEA_PROMPT_TEMPLATE = "Generate a creative short story idea based on this description: {description} and the following themes: {tags}. Make sure the story idea is different from the following stories: {stories}"
 GENERATE_STORY_PLOT_SYSTEM_PROMPT = """You are a creative writing assistant that generates engaging short story plots. 
@@ -81,7 +85,7 @@ def short_story_generator():
         description = context["params"]["description"]
         tags = context["params"]["tags"]
         quantity = context["params"]["quantity"]
-        openai_hook = OpenAIHook(conn_id="my_openai_conn")
+        openai_hook = OpenAIHook(conn_id="my_togetherai_conn")
         client = openai_hook.get_conn()
         
         story_ideas = []
@@ -106,7 +110,7 @@ def short_story_generator():
     @task(retries=3, retry_delay=duration(seconds=60))
     def generate_story_plot(story_idea: str) -> str:
         """Generate a story plot based on the story idea."""
-        sambanova_hook = OpenAIHook(conn_id="my_openai_conn")
+        sambanova_hook = OpenAIHook(conn_id="my_togetherai_conn")
         client = sambanova_hook.get_conn()
         
         response = client.chat.completions.create(
@@ -156,10 +160,11 @@ def short_story_generator():
     @task(retries=3, retry_delay=duration(seconds=60))
     def generate_story_content(story_data) -> str:
         """Generate the story content based on the story idea and plot."""
+        import time
         story_idea, story_plot = story_data  # Unpack zipped data
         
         # connect to sambanova
-        sambanova_hook = OpenAIHook(conn_id="my_openai_conn")
+        sambanova_hook = OpenAIHook(conn_id="my_togetherai_conn")
         client = sambanova_hook.get_conn()
 
         story_sections = []
