@@ -1,23 +1,66 @@
-\documentclass[a4paper,12pt]{article}
-\usepackage[margin=2cm]{geometry}
+\documentclass[12pt]{article}
+\usepackage[paperwidth=165mm, paperheight=165mm, margin=0cm]{geometry}
 \usepackage[utf8]{inputenc}
 \usepackage{parskip}
-\usepackage{times}
-
-\title{{{STORY_TITLE}}}
-\author{AI Generated Story}
-\date{\today}
+\usepackage{graphicx}
+\usepackage{eso-pic}
+\usepackage{mathpazo}           % Palatino font
+\usepackage{xcolor}
+\usepackage{tikz}               % for precise placement
+\usepackage{ragged2e}
+\usepackage{hyperref}
 
 \begin{document}
 
-\maketitle
+% ---------- COVER PAGE ----------
+\AddToShipoutPictureBG*{%
+  \includegraphics[width=\paperwidth,height=\paperheight]{example_cover_1.png}%
+}
 
-\begin{center}
-\Large\textbf{Short Story Collection}
-\end{center}
+\begin{tikzpicture}[remember picture, overlay]
+  % Optional translucent panel behind the text
+  \fill[black, opacity=0.45] 
+      ([yshift=-11.5cm]current page.north west) rectangle
+      ([yshift=1.5cm]current page.south east);
 
-\vspace{1cm}
+  % Title, subtitle, author, year, and website (no "Self-published eBook")
+  \node[anchor=west, align=left, text=white]
+    at ([xshift=1.5cm,yshift=-5.5cm]current page.west |- current page.center) {
+      \Huge\bfseries {{STORY_TITLE}}\\[0.5em]
+      \Large {{AUTHOR}}\\[1.5em]
+  };
+\end{tikzpicture}
+
+\vfill
+\newpage
+
+% ---------- STORY PAGE ----------
+\newgeometry{margin=2cm}
 
 {{STORY_CONTENT}}
 
-\end{document} 
+% ---------- BACK COVER ----------
+\newpage
+\newgeometry{margin=0cm} % full page without margin
+
+% --- TikZ overlay -------------------------------------------------
+\begin{tikzpicture}[remember picture, overlay]
+  % Full dark-gray background
+  \fill[black!95] (current page.south west) rectangle (current page.north east);
+
+  % Centred white text
+  \node[
+    anchor=center,
+    align=center,
+    text=white,
+    font=\small,
+    text width=0.75\paperwidth
+  ] at (current page.center) {%
+      Book created using an AI tool by Ivan Rodriguez.\\[0.5em]
+      Contact: \href{mailto:ivanrodcar@outlook.com}{ivanrodcar@outlook.com}\\[0.5em]
+    Web: \href{https://www.ivanrodcar.com}{ivanrodcar.com}\\[1.5em]
+      \small\textcopyright\ {{YEAR}} {{AUTHOR}}. All rights reserved.\\
+  };
+\end{tikzpicture}
+
+\end{document}

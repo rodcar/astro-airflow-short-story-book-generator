@@ -64,7 +64,8 @@ STORY_CONTENT_TEMPERATURE = 0.8
     params={
         "description": "A story about a cat",
         "tags": "fiction, creative, storytelling", 
-        "quantity": 3
+        "quantity": 3,
+        "author": "Ivan Rodriguez"
     },
     default_args={
         "retries": 1,
@@ -200,16 +201,19 @@ def short_story_generator():
 
     _generated_story_contents = generate_story_content.expand(story_data=_generated_story_ideas.zip(_generated_story_plots))
 
-    @task(retries=5, retry_delay=duration(seconds=10))
-    def generate_pdf(story_sections) -> str:
+    @task(retries=5, retry_delay=duration(seconds=20))
+    def generate_book(story_sections, **context) -> str:
         """Generate PDF from story content using LaTeX template."""
+        import datetime
+        
         # Format story content
         formatted_content = ""
         story_title = "Generated Story"
         
         for section in story_sections:
-            formatted_content += f"\\section{{{section['title']}}}\n"
+            formatted_content += f"\\section*{{{section['title']}}}\n"
             formatted_content += f"{section['content']}\n\n"
+            formatted_content += "\\newpage\n"
             
         # Get the first section title as story title
         if story_sections:
@@ -223,21 +227,31 @@ def short_story_generator():
         # Replace placeholders
         tex_content = template.replace("{{STORY_TITLE}}", story_title)
         tex_content = tex_content.replace("{{STORY_CONTENT}}", formatted_content)
+
+        # Replace author
+        tex_content = tex_content.replace("{{AUTHOR}}", context["params"]["author"])
+
+        # Replace year (dynamic)
+        tex_content = tex_content.replace("{{YEAR}}", str(datetime.datetime.now().year))
         
         # Write temp tex file
         tex_filename = f"include/temp_story_{story_title.replace(' ', '_')[:10]}.tex"
         with open(tex_filename, 'w') as f:
             f.write(tex_content)
             
-        # Generate PDF
+        # Generate PDF (run twice for TikZ overlays)
         pdf_filename = tex_filename.replace('.tex', '.pdf')
+        pdflatex_cmd = [
+            'pdflatex',
+            '-interaction=nonstopmode',
+            '-output-directory=include', 
+            tex_filename
+        ]
         try:
-            result = subprocess.run([
-                'pdflatex', 
-                '-interaction=nonstopmode',  # Don't stop for errors
-                '-output-directory=include', 
-                tex_filename
-            ], check=True, capture_output=True, text=True, timeout=60)
+            # First pass
+            subprocess.run(pdflatex_cmd, check=True, capture_output=True, text=True, timeout=60)
+            # Second pass for TikZ overlays
+            result = subprocess.run(pdflatex_cmd, check=True, capture_output=True, text=True, timeout=60)
             logging.info(f"PDF generation successful: {result.stdout}")
         except subprocess.TimeoutExpired:
             logging.error("PDF generation timed out")
@@ -257,6 +271,6 @@ def short_story_generator():
             
         return pdf_filename
 
-    _generated_pdfs = generate_pdf.expand(story_sections=_generated_story_contents)
+    _generated_pdfs = generate_book.expand(story_sections=_generated_story_contents)
 
 _short_story_generator_dag = short_story_generator()
