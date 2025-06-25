@@ -42,7 +42,7 @@ GENERATE_STORY_CONTENT_SYSTEM_PROMPT = """You are a creative writing assistant t
 You will be asked to write a specific section of a story while maintaining continuity with what has been written so far and the overall plot.
 Return ONLY a valid JSON object with "title" and "content" properties. No other text or formatting.
 Make sure the content flows naturally from previous sections and sets up future sections appropriately.
-Keep the content engaging and well-written, with a length appropriate for the section (typically 1000-1600 words per section)."""
+Keep the content engaging and well-written, with a length appropriate for the section (typically 1200-1800 words per section)."""
 GENERATE_STORY_CONTENT_PROMPT_TEMPLATE = """Write the '{current_section}' section of a short story.
 
 Story Idea: {story_idea}
@@ -66,7 +66,7 @@ Example response format:
 {{"title": "The Mysterious Beginning", "content": "Once upon a time, in a small village..."}}
 
 Return only the JSON object, no other text."""
-STORY_CONTENT_MAX_TOKENS = 6000
+STORY_CONTENT_MAX_TOKENS = 7000
 STORY_CONTENT_TEMPERATURE = 0.8
 
 
