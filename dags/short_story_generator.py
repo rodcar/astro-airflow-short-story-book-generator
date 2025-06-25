@@ -153,11 +153,14 @@ def short_story_generator():
         image_base64 = response.data[0].b64_json
         logging.info(f"Generated image cover for story idea: {story_idea[:50]}...")
 
-        # Save the image to a file on include folder
-        # Truncate story_idea for filename to avoid "File name too long" error
-        safe_filename = story_idea.replace(" ", "_").replace("/", "_").replace("\\", "_")[:10]
-        filename = f"story_image_cover_{safe_filename}.png"
-        with open(f"include/{filename}", "wb") as f:
+        # Create subfolder for the book
+        safe_folder_name = story_idea.replace(" ", "_").replace("/", "_").replace("\\", "_")[:15]
+        book_folder = f"include/{safe_folder_name}"
+        os.makedirs(book_folder, exist_ok=True)
+        
+        # Save the image to the book subfolder
+        filename = f"{book_folder}/cover.png"
+        with open(filename, "wb") as f:
             f.write(base64.b64decode(image_base64))
         return filename
 
@@ -199,10 +202,17 @@ def short_story_generator():
             
             try:
                 import json
-                section_data = json.loads(raw_content)
-                extracted_title = section_data.get("title", section)
-                clean_content = section_data.get("content", "")
-            except json.JSONDecodeError:
+                import re
+                # Try to extract JSON from raw content if it contains JSON-like structure
+                json_match = re.search(r'\{"title":\s*"([^"]*)"[^}]*"content":\s*"([^"]*(?:"[^"]*"[^"]*)*)"[^}]*\}', raw_content, re.DOTALL)
+                if json_match:
+                    extracted_title = json_match.group(1)
+                    clean_content = json_match.group(2).replace('\\"', '"')
+                else:
+                    section_data = json.loads(raw_content)
+                    extracted_title = section_data.get("title", section)
+                    clean_content = section_data.get("content", "")
+            except (json.JSONDecodeError, AttributeError):
                 # Fallback to section name if JSON parsing fails
                 logging.warning(f"Failed to parse JSON response for section '{section}'. Using raw content.")
                 extracted_title = section
@@ -244,7 +254,7 @@ def short_story_generator():
         # Replace placeholders
         tex_content = template.replace("{{STORY_TITLE}}", story_title)
         tex_content = tex_content.replace("{{STORY_CONTENT}}", formatted_content)
-        tex_content = tex_content.replace("{{COVER_IMAGE}}", cover_image)
+        tex_content = tex_content.replace("{{COVER_IMAGE}}", "cover.png")  # Use relative path within book folder
 
         # Replace author
         tex_content = tex_content.replace("{{AUTHOR}}", context["params"]["author"])
@@ -252,19 +262,20 @@ def short_story_generator():
         # Replace year (dynamic)
         tex_content = tex_content.replace("{{YEAR}}", str(datetime.datetime.now().year))
         
-        # Write temp tex file
-        # Sanitize story_title for filename - remove problematic characters
-        safe_story_title = story_title.replace(" ", "_").replace("/", "_").replace("\\", "_").replace("'", "").replace('"', "").replace(":", "").replace("?", "").replace("*", "").replace("<", "").replace(">", "").replace("|", "")
-        tex_filename = f"include/temp_story_{safe_story_title[:10]}.tex"
+        # Get book folder from cover image path
+        book_folder = os.path.dirname(cover_image)
+        
+        # Write tex file to book folder
+        tex_filename = f"{book_folder}/story.tex"
         with open(tex_filename, 'w') as f:
             f.write(tex_content)
             
-        # Generate PDF (run twice for TikZ overlays)
-        pdf_filename = tex_filename.replace('.tex', '.pdf')
+        # Generate PDF in book folder
+        pdf_filename = f"{book_folder}/story.pdf"
         pdflatex_cmd = [
             'pdflatex',
             '-interaction=nonstopmode',
-            '-output-directory=include', 
+            f'-output-directory={book_folder}', 
             tex_filename
         ]
         try:
@@ -280,14 +291,11 @@ def short_story_generator():
             logging.error(f"PDF generation failed: {e.stderr}")
             raise
         
-        # Clean up temp files
-        os.remove(tex_filename)
-        aux_file = tex_filename.replace('.tex', '.aux')
-        log_file = tex_filename.replace('.tex', '.log')
-        if os.path.exists(aux_file):
-            os.remove(aux_file)
-        if os.path.exists(log_file):
-            os.remove(log_file)
+        # Clean up auxiliary files
+        for ext in ['.aux', '.log', '.out']:
+            aux_file = f"{book_folder}/story{ext}"
+            if os.path.exists(aux_file):
+                os.remove(aux_file)
             
         return pdf_filename
 
