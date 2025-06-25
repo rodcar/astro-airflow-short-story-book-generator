@@ -40,9 +40,9 @@ STORY_SECTIONS = [
 ]
 GENERATE_STORY_CONTENT_SYSTEM_PROMPT = """You are a creative writing assistant that generates engaging short story content section by section. 
 You will be asked to write a specific section of a story while maintaining continuity with what has been written so far and the overall plot.
-Return only the story content for the requested section, no other text or section headers.
+Return ONLY a valid JSON object with "title" and "content" properties. No other text or formatting.
 Make sure the content flows naturally from previous sections and sets up future sections appropriately.
-Keep the content engaging and well-written, with a length appropriate for the section (typically 200-400 words per section)."""
+Keep the content engaging and well-written, with a length appropriate for the section (typically 800-1600 words per section)."""
 GENERATE_STORY_CONTENT_PROMPT_TEMPLATE = """Write the '{current_section}' section of a short story.
 
 Story Idea: {story_idea}
@@ -53,14 +53,20 @@ Story Written So Far:
 {story_content}
 
 Instructions:
-- Include a creative title for this section wrapped in <title></title> tags at the beginning
-- Write specifically the '{current_section}' section
+- Return ONLY a JSON object with "title" and "content" properties
+- Include a creative title for this section in the "title" field (limit 32 characters)
+- Write specifically the '{current_section}' section content in the "content" field
 - Ensure it flows naturally from what has been written so far
 - Follow the plot outline to maintain story coherence
 - Set up the narrative appropriately for the sections that will follow
 - Focus on advancing the story according to the plot structure
-- Maintain consistent character voices and story tone"""
-STORY_CONTENT_MAX_TOKENS = 1000
+- Maintain consistent character voices and story tone
+
+Example response format:
+{{"title": "The Mysterious Beginning", "content": "Once upon a time, in a small village..."}}
+
+Return only the JSON object, no other text."""
+STORY_CONTENT_MAX_TOKENS = 6000
 STORY_CONTENT_TEMPERATURE = 0.8
 
 
@@ -68,7 +74,7 @@ STORY_CONTENT_TEMPERATURE = 0.8
     params={
         "description": "A story about a cat",
         "tags": "fiction, creative, storytelling", 
-        "quantity": 3,
+        "quantity": 1,
         "author": "Ivan Rodriguez"
     },
     default_args={
@@ -188,16 +194,19 @@ def short_story_generator():
                 temperature=STORY_CONTENT_TEMPERATURE
             )
             
-            # Extract title and content
+            # Parse JSON response
             raw_content = response.choices[0].message.content.strip()
             
-            # Extract title from <title></title> tags
-            import re
-            title_match = re.search(r'<title>(.*?)</title>', raw_content)
-            extracted_title = title_match.group(1) if title_match else section
-            
-            # Remove title tags from content
-            clean_content = re.sub(r'<title>.*?</title>\s*', '', raw_content)
+            try:
+                import json
+                section_data = json.loads(raw_content)
+                extracted_title = section_data.get("title", section)
+                clean_content = section_data.get("content", "")
+            except json.JSONDecodeError:
+                # Fallback to section name if JSON parsing fails
+                logging.warning(f"Failed to parse JSON response for section '{section}'. Using raw content.")
+                extracted_title = section
+                clean_content = raw_content
             
             story_sections.append({
                 "title": extracted_title,
