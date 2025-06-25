@@ -99,8 +99,8 @@ def short_story_generator():
     @task(retries=3, retry_delay=duration(seconds=30))
     def generate_story_plot(story_idea: str) -> str:
         """Generate a story plot based on the story idea."""
-        openai_hook = OpenAIHook(conn_id="my_sambanova_conn")
-        client = openai_hook.get_conn()
+        sambanova_hook = OpenAIHook(conn_id="my_sambanova_conn")
+        client = sambanova_hook.get_conn()
         
         response = client.chat.completions.create(
             model=MODEL_ID,
@@ -190,9 +190,6 @@ def short_story_generator():
                 "title": extracted_title,
                 "content": clean_content
             })
-
-
-
         return story_sections
 
     _generated_story_contents = generate_story_content.expand(story_data=_generated_story_ideas.zip(_generated_story_plots))
