@@ -2,13 +2,19 @@ from airflow.sdk import dag, task, Variable
 from airflow.providers.openai.hooks.openai import OpenAIHook
 from pendulum import duration
 import logging
+import os
+import subprocess
 
 STORY_IDEA_MAX_TOKENS = 300
 STORY_IDEA_TEMPERATURE = 1.0
 STORY_PLOT_MAX_TOKENS = 1000
 STORY_PLOT_TEMPERATURE = 0.8
 
-MODEL_ID = "Llama-4-Maverick-17B-128E-Instruct"
+# Sambanova model
+MODEL_ID = "gpt-4.1"
+
+# Maverick model
+#MODEL_ID = "Llama-4-Maverick-17B-128E-Instruct"
 GENERATE_STORY_IDEA_SYSTEM_PROMPT = "You are a creative writing assistant that generates engaging short story ideas. Return only the story idea, no other text. Make sure the story idea is not too long or too short, maximum 100 words."
 GENERATE_STORY_IDEA_PROMPT_TEMPLATE = "Generate a creative short story idea based on this description: {description} and the following themes: {tags}. Make sure the story idea is different from the following stories: {stories}"
 GENERATE_STORY_PLOT_SYSTEM_PROMPT = """You are a creative writing assistant that generates engaging short story plots. 
@@ -74,7 +80,7 @@ def short_story_generator():
         description = context["params"]["description"]
         tags = context["params"]["tags"]
         quantity = context["params"]["quantity"]
-        openai_hook = OpenAIHook(conn_id="my_sambanova_conn")
+        openai_hook = OpenAIHook(conn_id="my_openai_conn")
         client = openai_hook.get_conn()
         
         story_ideas = []
@@ -96,10 +102,10 @@ def short_story_generator():
     
     _generated_story_ideas = generate_story_ideas()
 
-    @task(retries=3, retry_delay=duration(seconds=30))
+    @task(retries=3, retry_delay=duration(seconds=60))
     def generate_story_plot(story_idea: str) -> str:
         """Generate a story plot based on the story idea."""
-        sambanova_hook = OpenAIHook(conn_id="my_sambanova_conn")
+        sambanova_hook = OpenAIHook(conn_id="my_openai_conn")
         client = sambanova_hook.get_conn()
         
         response = client.chat.completions.create(
@@ -115,7 +121,7 @@ def short_story_generator():
 
     _generated_story_plots = generate_story_plot.expand(story_idea=_generated_story_ideas)
 
-    @task(retries=3, retry_delay=duration(seconds=30))
+    @task(retries=3, retry_delay=duration(seconds=60))
     def generate_story_image_cover(story_idea: str) -> str:
         """Generate an image cover for the story based on the story idea."""
         openai_hook = OpenAIHook(conn_id="my_openai_conn")
@@ -145,13 +151,13 @@ def short_story_generator():
 
     #_generated_story_image_covers = generate_story_image_cover.expand(story_idea=_generated_story_ideas)
 
-    @task(retries=3, retry_delay=duration(seconds=30))
+    @task(retries=3, retry_delay=duration(seconds=60))
     def generate_story_content(story_data) -> str:
         """Generate the story content based on the story idea and plot."""
         story_idea, story_plot = story_data  # Unpack zipped data
         
         # connect to sambanova
-        sambanova_hook = OpenAIHook(conn_id="my_sambanova_conn")
+        sambanova_hook = OpenAIHook(conn_id="my_openai_conn")
         client = sambanova_hook.get_conn()
 
         story_sections = []
@@ -193,5 +199,64 @@ def short_story_generator():
         return story_sections
 
     _generated_story_contents = generate_story_content.expand(story_data=_generated_story_ideas.zip(_generated_story_plots))
+
+    @task(retries=5, retry_delay=duration(seconds=10))
+    def generate_pdf(story_sections) -> str:
+        """Generate PDF from story content using LaTeX template."""
+        # Format story content
+        formatted_content = ""
+        story_title = "Generated Story"
         
+        for section in story_sections:
+            formatted_content += f"\\section{{{section['title']}}}\n"
+            formatted_content += f"{section['content']}\n\n"
+            
+        # Get the first section title as story title
+        if story_sections:
+            story_title = story_sections[0]['title']
+            
+        # Read template
+        template_path = "include/story_template.tex"
+        with open(template_path, 'r') as f:
+            template = f.read()
+            
+        # Replace placeholders
+        tex_content = template.replace("{{STORY_TITLE}}", story_title)
+        tex_content = tex_content.replace("{{STORY_CONTENT}}", formatted_content)
+        
+        # Write temp tex file
+        tex_filename = f"include/temp_story_{story_title.replace(' ', '_')[:10]}.tex"
+        with open(tex_filename, 'w') as f:
+            f.write(tex_content)
+            
+        # Generate PDF
+        pdf_filename = tex_filename.replace('.tex', '.pdf')
+        try:
+            result = subprocess.run([
+                'pdflatex', 
+                '-interaction=nonstopmode',  # Don't stop for errors
+                '-output-directory=include', 
+                tex_filename
+            ], check=True, capture_output=True, text=True, timeout=60)
+            logging.info(f"PDF generation successful: {result.stdout}")
+        except subprocess.TimeoutExpired:
+            logging.error("PDF generation timed out")
+            raise
+        except subprocess.CalledProcessError as e:
+            logging.error(f"PDF generation failed: {e.stderr}")
+            raise
+        
+        # Clean up temp files
+        os.remove(tex_filename)
+        aux_file = tex_filename.replace('.tex', '.aux')
+        log_file = tex_filename.replace('.tex', '.log')
+        if os.path.exists(aux_file):
+            os.remove(aux_file)
+        if os.path.exists(log_file):
+            os.remove(log_file)
+            
+        return pdf_filename
+
+    _generated_pdfs = generate_pdf.expand(story_sections=_generated_story_contents)
+
 _short_story_generator_dag = short_story_generator()
