@@ -146,11 +146,12 @@ def short_story_generator():
         # Save the image to a file on include folder
         # Truncate story_idea for filename to avoid "File name too long" error
         safe_filename = story_idea.replace(" ", "_").replace("/", "_").replace("\\", "_")[:10]
-        with open(f"include/story_image_cover_{safe_filename}.png", "wb") as f:
+        filename = f"story_image_cover_{safe_filename}.png"
+        with open(f"include/{filename}", "wb") as f:
             f.write(base64.b64decode(image_base64))
-        return image_base64
+        return filename
 
-    #_generated_story_image_covers = generate_story_image_cover.expand(story_idea=_generated_story_ideas)
+    _generated_story_image_covers = generate_story_image_cover.expand(story_idea=_generated_story_ideas)
 
     @task(retries=3, retry_delay=duration(seconds=60))
     def generate_story_content(story_data) -> str:
@@ -202,9 +203,11 @@ def short_story_generator():
     _generated_story_contents = generate_story_content.expand(story_data=_generated_story_ideas.zip(_generated_story_plots))
 
     @task(retries=5, retry_delay=duration(seconds=20))
-    def generate_book(story_sections, **context) -> str:
+    def generate_book(book_data, **context) -> str:
         """Generate PDF from story content using LaTeX template."""
         import datetime
+        
+        story_sections, cover_image = book_data  # Unpack story sections and cover image
         
         # Format story content
         formatted_content = ""
@@ -227,6 +230,7 @@ def short_story_generator():
         # Replace placeholders
         tex_content = template.replace("{{STORY_TITLE}}", story_title)
         tex_content = tex_content.replace("{{STORY_CONTENT}}", formatted_content)
+        tex_content = tex_content.replace("{{COVER_IMAGE}}", cover_image)
 
         # Replace author
         tex_content = tex_content.replace("{{AUTHOR}}", context["params"]["author"])
@@ -271,6 +275,6 @@ def short_story_generator():
             
         return pdf_filename
 
-    _generated_pdfs = generate_book.expand(story_sections=_generated_story_contents)
+    _generated_pdfs = generate_book.expand(book_data=_generated_story_contents.zip(_generated_story_image_covers))
 
 _short_story_generator_dag = short_story_generator()
