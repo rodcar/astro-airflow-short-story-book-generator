@@ -219,7 +219,7 @@ def short_story_generator():
         story_title = "Generated Story"
         
         for section in story_sections:
-            formatted_content += f"\\section*{{{section['title']}}}\n"
+            formatted_content += f"\\begin{{center}}\n\\section*{{{section['title']}}}\n\\end{{center}}\n"
             formatted_content += f"{section['content']}\n\n"
             formatted_content += "\\newpage\n"
             
