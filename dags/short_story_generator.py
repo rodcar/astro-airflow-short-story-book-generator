@@ -42,7 +42,7 @@ GENERATE_STORY_CONTENT_SYSTEM_PROMPT = """You are a creative writing assistant t
 You will be asked to write a specific section of a story while maintaining continuity with what has been written so far and the overall plot.
 Return ONLY a valid JSON object with "title" and "content" properties. No other text or formatting.
 Make sure the content flows naturally from previous sections and sets up future sections appropriately.
-Keep the content engaging and well-written, with a length appropriate for the section (typically 800-1600 words per section)."""
+Keep the content engaging and well-written, with a length appropriate for the section (typically 1000-1600 words per section)."""
 GENERATE_STORY_CONTENT_PROMPT_TEMPLATE = """Write the '{current_section}' section of a short story.
 
 Story Idea: {story_idea}
@@ -253,7 +253,9 @@ def short_story_generator():
         tex_content = tex_content.replace("{{YEAR}}", str(datetime.datetime.now().year))
         
         # Write temp tex file
-        tex_filename = f"include/temp_story_{story_title.replace(' ', '_')[:10]}.tex"
+        # Sanitize story_title for filename - remove problematic characters
+        safe_story_title = story_title.replace(" ", "_").replace("/", "_").replace("\\", "_").replace("'", "").replace('"', "").replace(":", "").replace("?", "").replace("*", "").replace("<", "").replace(">", "").replace("|", "")
+        tex_filename = f"include/temp_story_{safe_story_title[:10]}.tex"
         with open(tex_filename, 'w') as f:
             f.write(tex_content)
             
